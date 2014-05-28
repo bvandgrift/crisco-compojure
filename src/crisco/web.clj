@@ -6,9 +6,10 @@
             [ring.middleware.stacktrace :as trace]
             [ring.middleware.params :as p]
             [ring.adapter.jetty :as jetty]
-            [environ.core :refer [env]]))
+            [environ.core :refer [env]]
+            [crisco.data :as data]))
 
-(defroutes app
+(defroutes routes
   (GET "/" []
        {:status 200
         :headers {"Content-Type" "text/html"}
@@ -16,8 +17,18 @@
                   io/resource
                   slurp
                   )})
+  (GET "/:slug" [slug]
+       {:status 301
+        :headers {"Location" (data/request-redirect! [slug])}})
+  (POST "/shorten/:slug" [slug target]
+        (if (data/store-slug! slug target)
+          {:status 200}
+          {:status 409}))
   (ANY "*" []
        (route/not-found (slurp (io/resource "404.html")))))
+
+(def app (-> routes
+             p/wrap-params))
 
 (defn wrap-error-page [handler]
   (fn [req]

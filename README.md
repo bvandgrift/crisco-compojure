@@ -108,22 +108,22 @@ something basic to build on. Our lein template gives us a good headstart
 and a project structure to play with, beginning with the `project.clj`
 file:
 
-```
-    (defproject crisco "1.0.0-SNAPSHOT"
-      :description "a project for url shortening"
-      :url "http://github.com/bvandgrift/crisco"
-      :dependencies [[org.clojure/clojure "1.6.0"]
-                     [compojure "1.1.8"]
-                     [ring/ring-jetty-adapter "1.2.2"]
-                     [ring/ring-devel "1.2.2"]
-                     [environ "0.5.0"]]
-      :min-lein-version "2.0.0"
-      :plugins [[environ/environ.lein "0.2.1"]
-                [lein-ring "0.8.0"]]
-      :hooks [environ.leiningen.hooks]
-      :uberjar-name "crisco-standalone.jar"
-      :profiles {:production {:env {:production true}}}
-      :ring {:handler crisco.web/app})
+```clojure
+(defproject crisco "1.0.0-SNAPSHOT"
+  :description "a project for url shortening"
+  :url "http://github.com/bvandgrift/crisco"
+  :dependencies [[org.clojure/clojure "1.6.0"]
+                 [compojure "1.1.8"]
+                 [ring/ring-jetty-adapter "1.2.2"]
+                 [ring/ring-devel "1.2.2"]
+                 [environ "0.5.0"]]
+  :min-lein-version "2.0.0"
+  :plugins [[environ/environ.lein "0.2.1"]
+            [lein-ring "0.8.0"]]
+  :hooks [environ.leiningen.hooks]
+  :uberjar-name "crisco-standalone.jar"
+  :profiles {:production {:env {:production true}}}
+  :ring {:handler crisco.web/app})
 ```
 
 The `project.clj` file tells lein everything it needs to know to load
@@ -170,17 +170,16 @@ let's work with that.
 Our template created this file for us. It has more than we need
 at the moment, but let's look at the moving parts:
 
-```
-
-    (ns crisco.web
-      (:require [compojure.core :refer [defroutes GET PUT POST DELETE ANY]]
-                [compojure.handler :refer [site]]
-                [compojure.route :as route]
-                [clojure.java.io :as io]
-                [ring.middleware.stacktrace :as trace]
-                [ring.middleware.params :as p]
-                [ring.adapter.jetty :as jetty]
-                [environ.core :refer [env]]))
+```clojure
+(ns crisco.web
+  (:require [compojure.core :refer [defroutes GET PUT POST DELETE ANY]]
+            [compojure.handler :refer [site]]
+            [compojure.route :as route]
+            [clojure.java.io :as io]
+            [ring.middleware.stacktrace :as trace]
+            [ring.middleware.params :as p]
+            [ring.adapter.jetty :as jetty]
+            [environ.core :refer [env]]))
 ```
 
 We define our namespace with `ns crisco.web`, and require a few libraries
@@ -201,27 +200,25 @@ Next up are the routes we'll be using. This next section is primarily
 what compojure brings to the party. Without compojure to handle the
 routing for ring---well, let's just say this is much nicer.
 
-```
-
-    (defroutes app
-      (GET "/" []
-           {:status 200
-            :headers {"Content-Type" "text/plain"}
-            :body (pr-str ["Hello" :from 'Heroku])})
-      (ANY "*" []
-           (route/not-found (slurp (io/resource "404.html")))))
+```clojure
+(defroutes app
+  (GET "/" []
+       {:status 200
+        :headers {"Content-Type" "text/plain"}
+        :body (pr-str ["Hello" :from 'Heroku])})
+  (ANY "*" []
+       (route/not-found (slurp (io/resource "404.html")))))
 ```
 
 So, we get 'say hello', and anything else is a 404. Actually, ANY
 route gives us a leg up on creating a real index page. Let's replace
 the `GET "/"` route:
 
-```
-
-    (GET "/" []
-         {:status 200
-          :headers {"Content-Type" "text/plain"}
-          :body (slurp (io/resource "index.html"))})
+```clojure
+(GET "/" []
+     {:status 200
+      :headers {"Content-Type" "text/plain"}
+      :body (slurp (io/resource "index.html"))})
 ```
 
 This will read into the response body the contents of the `index.html` file
@@ -229,14 +226,13 @@ in the `resources/` directory. `io/resource` attaches a stream reader to
 the file system, and `slurp` reads everything into a string. We could've
 also done:
 
-```
-
-    (GET "/" []
-         {:status 200
-          :headers {"Content-Type" "text/html"}
-          :body (-> "index.html"
-                    io/resource
-                    slurp)})
+```clojure
+(GET "/" []
+     {:status 200
+      :headers {"Content-Type" "text/html"}
+      :body (-> "index.html"
+                io/resource
+                slurp)})
 ```
 
 That might be more idiomatic, but it's a short enough list that I don't
@@ -303,11 +299,10 @@ Server: Jetty(7.6.8.v20121106)
 
 Easy enough; we'll add that route to our `defproject` in `web.clj`:
 
-```
-
-  (GET "/gh" []
-       {:status 301
-        :headers {"Location" "http://github.com"}})
+```clojure
+(GET "/gh" []
+     {:status 301
+      :headers {"Location" "http://github.com"}})
 ```
 
 Github isn't the only shortened url we want, however. We'd like to be
@@ -319,10 +314,9 @@ keep track of the number of times a particular slug has been visited (listed
 in our goals from above), then we can't just use a simple map, we need
 a nested data structure:
 
-```
-
-    (def urls (atom {:gh {:target "http://github.com" :redirects 2}
-                     :gg {:target "http://google.com" :redirects 1}}))
+```clojure
+(def urls (atom {:gh {:target "http://github.com" :redirects 2}
+                 :gg {:target "http://google.com" :redirects 1}}))
 ```
 
 While we don't expect to be running any heavily-loaded operations in
@@ -332,13 +326,12 @@ for concurrent access. For that, we'll use an `atom`.
 We could go the extra mile and define a `record` for our slugs, but that
 might be overkill, and we'd still need a hash for easy access:
 
-```
-
-    (defrecord Slug [slug target redirects])
-    (def urls (atom {
-      :gh (->Slug :gh "http://github.com" 2)
-      :gg (->Slug :gg "http://google.com" 2)
-      }))
+```clojure
+(defrecord Slug [slug target redirects])
+(def urls (atom {
+  :gh (->Slug :gh "http://github.com" 2)
+  :gg (->Slug :gg "http://google.com" 2)
+  }))
 ```
 
 Let's stick with a map. Now, what functions will be operating on
@@ -359,24 +352,23 @@ which seems to beg for its own namespace. Let's call it `crisco.data`, since
 we know we'll be adding a persistence mechanism later. Here's what it might
 look like:
 
-```
+```clojure
+(ns crisco.data)
 
-    (ns crisco.data)
+(def ^:private urls (atom {:gh {:target "http://github.com" :redirects 0}
+                 :gg {:target "http://google.com" :redirects 0}}))
 
-    (def ^:private urls (atom {:gh {:target "http://github.com" :redirects 0}
-                     :gg {:target "http://google.com" :redirects 0}}))
+(defn- get-target [slug]
+  (get-in @urls [(keyword slug) :target]))
 
-    (defn- get-target [slug]
-      (get-in @urls [(keyword slug) :target]))
+(defn store-slug! [slug target]
+  (if-not (get-target slug)
+    (swap! urls #(assoc %1 (keyword slug) {:target target :redirects 0}))))
 
-    (defn store-slug! [slug target]
-      (if-not (get-target slug)
-        (swap! urls #(assoc %1 (keyword slug) {:target target :redirects 0}))))
-
-    (defn request-redirect! [slug]
-      (when-let [target (get-target slug)]
-        (swap! urls #(update-in %1 [(keyword slug) :redirects] (fnil inc 0)))
-        target))
+(defn request-redirect! [slug]
+  (when-let [target (get-target slug)]
+    (swap! urls #(update-in %1 [(keyword slug) :redirects] (fnil inc 0)))
+    target))
 ```
 
 I've added a private function (denoted by the '-' after `defn`, obviously)
@@ -386,17 +378,17 @@ API.
 
 We can test things out using `lein repl`:
 
-```
-    crisco.web=> (require '[crisco.data :as data])
-    nil
-    crisco.web=> (data/request-redirect! "gh")
-    "http://github.com"
-    crisco.web=> (data/store-slug! "me" "http://ben.vandgrift.com")
-    {:gh {:redirects 1, :target "http://github.com"},
-     :gg {:redirects 0, :target "http://google.com"},
-     :me {:target "http://ben.vandgrift.com", :redirects 0}}
-    crisco.web=> (data/request-redirect! "me")
-    "http://ben.vandgrift.com"
+```repl
+crisco.web=> (require '[crisco.data :as data])
+nil
+crisco.web=> (data/request-redirect! "gh")
+"http://github.com"
+crisco.web=> (data/store-slug! "me" "http://ben.vandgrift.com")
+{:gh {:redirects 1, :target "http://github.com"},
+ :gg {:redirects 0, :target "http://google.com"},
+ :me {:target "http://ben.vandgrift.com", :redirects 0}}
+crisco.web=> (data/request-redirect! "me")
+"http://ben.vandgrift.com"
 ```
 
 ## Using the Data API from web.clj
@@ -404,24 +396,22 @@ We can test things out using `lein repl`:
 Let's tie this in to some web functionality. In `web.clj`, we'll add our
 data api to the required list:
 
+```clojure
+(ns crisco.web
+  (:require ;; ...
+            [crisco.data :as data]))
 ```
 
-    (ns crisco.web
-      (:require ;; ...
-                [crisco.data :as data]))
-```
+Next we'll drop two new routes into our routes list:
 
-Next we'll drop a two new routes into our routes list:
-
-```
-
-    (GET "/:slug" [slug]
-         {:status 301
-          :headers {"Location" (data/request-redirect! [slug])}})
-    (POST "/shorten/:slug" [slug target]
-          (if (data/store-slug! slug target)
-            {:status 200}
-            {:status 409}))
+```clojure
+(GET "/:slug" [slug]
+     {:status 301
+      :headers {"Location" (data/request-redirect! [slug])}})
+(POST "/shorten/:slug" [slug target]
+      (if (data/store-slug! slug target)
+        {:status 200}
+        {:status 409}))
 ```
 
 In order to properly parse params when running `lein ring`, we need
@@ -429,10 +419,9 @@ to wrap our app handler in `wrap-params`. First, we change `defroutes app`
 to `defroutes routes`, then add a function to do the wrapping, returning the
 modified app handler:
 
-```
-
-    (def app (-> routes
-                 p/wrap-params))
+```clojure
+(def app (-> routes
+             p/wrap-params))
 ```
 
 And that's it. Run `lein ring server-headless` and off you go. We don't

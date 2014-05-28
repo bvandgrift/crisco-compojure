@@ -432,6 +432,105 @@ have a UI yet, so we'll be using curl to post new slugs:
 Looks like everything's working a-ok.
 [Following along?](https://github.com/bvandgrift/crisco-compojure/tree/add-data-api)
 
+From here we could go a number of directions, but if build any more of
+our data API before we persist this information, we'll need to rework some
+of what we do. In the interest of efficiency, let's move on to our persistence
+layer.
+
+## Persistence
+
+It'd be nice to keep those links around after the server shuts down, no?
+
+### The Case for Datomic
+
+In this project, we'll be using Datomic as our data store. Here's why:
+
+* The lookup data will be sparse, and having a bunch of `NULL`s laying around
+  a data store seems sloppy to me.
+* We're not going to be throwing anything away. This is something Datomic does
+  extremely well.
+* We'll be creating time-based reports on this data. Datomic will let us
+  do that without hassling with roll-up tables or any janky warehousing
+  techniques.
+* SQL? JDBC from Clojure has traditionally been a shit show,
+  and I haven't felt like waiting for it to sort itself out.
+* redis? I love redis, but it's not great at storing potentially large
+  information indefinitely.
+* DynamoDB? Absolutely. We'll be using that (eventually) as Datomic's
+  data store. Even if it weren't a better fit generally, Datomic's aggregate
+  approach to reads makes our DynamoDB connection more efficient and drops
+  the bill.
+* Datalog is pretty neat, and lets us do neat things.
+* We can get started, and even get pretty far without configuring a database
+  of any kind, just using the in-memory Datomic API. Admittedly, this is
+  something of a softball reason, as if you're anything like me you already
+  have databases coming out of every available port on your system, using one
+  would involve no setup at all.
+* It's free to start with, and I doubt this application will require purchasing
+  a supported license. If for some reason it did, it's entirely possible that
+  switching data stores would be easier than figuring out Datomic's pricing
+  model.
+
+So, let's get back to the entities we're looking to store.
+
+### Entities: Slug and Lookup
+
+First, the slug. For each slug we
+want to use as a shortened url, we have two basic properties: the *slug*, a
+string, and the *target*, also a string. Either of these could be validated,
+but we're not going to worry about that right now. There is a third property
+we're interested in---*redirects*---but rather than store it as a number on
+our slug, we'll be calculating it based on the number of lookups we've seen.
+
+The other entity we care about holds the properties of a particular lookup.
+In particular, we want the date/time, the slug requested, the IP address
+of the requester, and the referring site. If we were to create a record,
+it might look like:
+
+```clojure
+(defrecord Lookup [datetime slug ip-address referrer])
+```
+
+There's a relationship here that a flat record won't capture. (Yes, I know
+that the lookups could be nested inside a Slug record, but then that Slug
+would start to become less efficient.) If you're coming from Rails, you
+might say that the Lookup belongs-to the Slug.
+
+As we move from a map to a Datomic entity, we also have to be cognizant of
+the type of data we'll be storing since Datomic's attributes are typed. With a
+couple of exceptions, these should be straightforward:
+
+* slug
+  * slug: string
+  * target: string
+  * lookups?: *reference*
+* lookup
+  * when: *instant*
+  * source-ip: string
+  * referrer: string
+  * slug: *reference*
+
+The two things that may be unfamiliar here are *instant* and *reference*.
+
+An `instant` is a point in time; we can extract it into the date/time format of our
+choice, but it's simply a count of the milliseconds from midnight, January
+1, 1970 UTC as far as Datomic is concerned.
+
+A `reference` stores the entity-id of the related slug. This will make more
+sense as we build a schema.
+
+### Creating a Schema
+
+In Datomic, the schema is data.  Also, data isn't stored in tables, but in
+attributes. This is great for sparse data, which is what we'd like. Each entity
+attribute is defined separately and has its own properties.
+
+### On Partitions
+
+
+
+
+
 # Q&A
 
 If you have questions, tweet/email/etc.
@@ -446,9 +545,7 @@ understands.
 
 Two reasons: First, learning Datomic became a requirement of my job
 function. Turns out it's good at a few things, one of which being the
-kind of data this app will be generating. Second, JDBC has traditionally
-been a shit show,
-and I haven't felt like waiting for it to sort itself out.
+kind of data this app will be generating.
 
 *"Why are you using ABC library instead of XYZ library?"*
 
